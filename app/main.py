@@ -1,11 +1,9 @@
-# app/main.py
 from fastapi import FastAPI, HTTPException
 import requests
 from pydantic import BaseModel
 
 app = FastAPI()
 
-# Define a more accurate name for the input data structure
 class EyeTrackingData(BaseModel):
     timestamp: float
     gazepoint_x: float
@@ -16,7 +14,6 @@ class EyeTrackingData(BaseModel):
     euclidean_distance: float
     prev_euclidean_distance: float
 
-# Route to forward the request to the model API
 @app.post("/classify")
 async def classify(eye_tracking_data: EyeTrackingData):
     try:
@@ -32,7 +29,6 @@ async def classify(eye_tracking_data: EyeTrackingData):
     except requests.exceptions.RequestException as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Health check endpoint
 @app.get("/")
 def read_root():
     return {"message": "Model Client Backend is running!"}
