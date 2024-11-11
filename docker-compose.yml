@@ -1,0 +1,16 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  model:
+    image: d932300e0b51
+    ports:
+      - "8080:8080"
+
+  client_backend:
+    build:
+      context: D:\SeeTrue\New folder\SeeTrue-AI\fast_server
+    ports:
+      - "8000:8000"
+    depends_on:
+      - model
