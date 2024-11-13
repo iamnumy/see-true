@@ -2,11 +2,6 @@
 
 This project sets up a backend for interacting with the SeeTrue classification model using FastAPI and Docker. The backend acts as an interface for sending data to the model API and receiving predictions.
 
-## Project Structure
-
-SeeTrue-backend/ │ ├── app/ │ ├── main.py # FastAPI application │ ├── Dockerfile # Dockerfile to containerize the backend │ ├── requirements.txt # Python dependencies │ └── docker-compose.yml # Docker Compose file for orchestrating containers
-
-
 
 ## Prerequisites
 - **Python 3.7+** installed on your system.
