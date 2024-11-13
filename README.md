@@ -20,14 +20,15 @@ pip install -r requirements.txt
 python -m uvicorn main:app --host 0.0.0.0 --port 8000
 
 
-POST /classify
-{
-  "timestamp": 123456789.0,
-  "gazepoint_x": 0.5,
-  "gazepoint_y": 0.5,
-  "pupil_area_right_sq_mm": 12.34,
-  "pupil_area_left_sq_mm": 11.22,
-  "eye_event": "FB",
-  "euclidean_distance": 1.5,
-  "prev_euclidean_distance": 1.5
-}
+API Endpoints
+/classify (POST)
+
+    Description: Upload a CSV file to classify data and get predictions from the model API.
+    Request Body: form-data
+        Key: file
+        Value: [Select your CSV file] (File)
+
+/ (GET)
+
+    Description: Health check endpoint to confirm the service is running.
+    Response: { "message": "Model Client Backend is running!" }
