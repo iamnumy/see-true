@@ -1,9 +1,16 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File
 import pandas as pd
+from fastapi.middleware.cors import CORSMiddleware
 import requests
 
 app = FastAPI()
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3001"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.post("/classify")
 async def upload_csv(file: UploadFile = File(...)):
     try:
@@ -11,6 +18,7 @@ async def upload_csv(file: UploadFile = File(...)):
         df = pd.read_csv(file.file)
         df.columns = df.columns.str.strip()
 
+        # Check for required columns
         required_columns = [
             "Timestamp", "Gazepoint X", "Gazepoint Y",
             "Pupil area (right) sq mm", "Pupil area (left) sq mm", "Eye event"
@@ -29,7 +37,7 @@ async def upload_csv(file: UploadFile = File(...)):
                 "eye_event": row["Eye event"].strip()
             }
 
-           try:
+            try:
                 response = requests.post(
                     "http://localhost:8080/predict",  # Use the existing /predict endpoint
                     json=data
