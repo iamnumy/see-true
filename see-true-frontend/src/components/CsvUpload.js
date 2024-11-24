@@ -1,14 +1,23 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import { Box, Button, Typography, CircularProgress, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, TablePagination } from '@mui/material';
-import backgroundImage from '../assets/vr-bg-2.jpg';
+import React, { useState, useEffect } from "react";
+import axios from "axios";
+import { Box, Button, Typography, CircularProgress } from "@mui/material";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import backgroundImage from "../assets/vr-bg-2.jpg";
 
-function CsvUpload() {
+function CsvLiveActivity() {
     const [csvFile, setCsvFile] = useState(null);
     const [loading, setLoading] = useState(false);
-    const [predictions, setPredictions] = useState([]);
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+    const [polling, setPolling] = useState(false);
+    const [currentActivity, setCurrentActivity] = useState("N/A");
+    const [finalActivity, setFinalActivity] = useState(null);
+    const [resultsKey, setResultsKey] = useState(null);
+
+    const labelMap = {
+        "1": "Walking",
+        "2": "Reading",
+        "3": "Playing",
+    };
 
     const handleFileChange = (event) => {
         setCsvFile(event.target.files[0]);
@@ -16,69 +25,106 @@ function CsvUpload() {
 
     const handleUpload = async () => {
         if (!csvFile) {
-            alert("Please select a file first.");
+            toast.error("Please select a file first.");
             return;
         }
 
         setLoading(true);
-        setPredictions([]);
+        setResultsKey(null);
+        setFinalActivity(null);
 
         const formData = new FormData();
         formData.append("file", csvFile);
 
         try {
-            const response = await axios.post("http://localhost:8000/classify", formData, {
+            const response = await axios.post("http://localhost:8000/classify_in_batches", formData, {
                 headers: {
-                    "Content-Type": "multipart/form-data"
-                }
+                    "Content-Type": "multipart/form-data",
+                },
             });
 
-            setPredictions(response.data.predictions);
-            alert("File uploaded and processed successfully!");
+            setResultsKey(response.data.key);
+            toast.success("File uploaded and processing started!");
         } catch (error) {
             console.error("Error uploading file:", error);
-            alert("Failed to upload and process the file.");
+            toast.error("Failed to upload and process the file.");
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        if (resultsKey) {
+            setPolling(true);
+
+            const cumulativeActivitySums = { "1": 0, "2": 0, "3": 0 };
+
+            const interval = setInterval(async () => {
+                try {
+                    const response = await axios.get(`http://localhost:8000/results/${resultsKey}`);
+                    const batches = response.data.batches;
+
+                    if (batches.length > 0) {
+                        const latestBatch = batches[batches.length - 1];
+
+                        const batchActivitySums = { "1": 0, "2": 0, "3": 0 };
+
+                        latestBatch.forEach((prediction) => {
+                            prediction.predictions.forEach((probability, index) => {
+                                const label = prediction.label_classes[index];
+                                batchActivitySums[label] += probability;
+                                cumulativeActivitySums[label] += probability;
+                            });
+                        });
+
+                        const batchDominantActivity = Object.keys(batchActivitySums).reduce((a, b) =>
+                            batchActivitySums[a] > batchActivitySums[b] ? a : b
+                        );
+                        setCurrentActivity(labelMap[batchDominantActivity]);
+                    }
+
+                    if (response.data.status === "complete") {
+                        clearInterval(interval);
+                        setPolling(false);
+
+                        const finalDominantActivity = Object.keys(cumulativeActivitySums).reduce((a, b) =>
+                            cumulativeActivitySums[a] > cumulativeActivitySums[b] ? a : b
+                        );
+                        setFinalActivity(labelMap[finalDominantActivity]);
+                        toast.success(`Processing complete! Final Activity: ${labelMap[finalDominantActivity]}`);
+                    }
+                } catch (error) {
+                    console.error("Error fetching results:", error);
+                    toast.error("Error fetching results.");
+                }
+            }, 10000);
+
+            return () => clearInterval(interval);
+        }
+    }, [resultsKey]);
+
     const handleButtonClick = () => {
-        document.getElementById('file-input').click();
+        document.getElementById("file-input").click();
     };
-
-    // Handle page change
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    };
-
-    // Handle rows per page change
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
-        setPage(0); // Reset to the first page
-    };
-
-    // Calculate the data to display on the current page
-    const paginatedData = predictions.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
     return (
         <Box
             sx={{
-                minHeight: '100vh',
-                display: 'flex',
-                flexDirection: 'column',
-                justifyContent: 'center',
-                alignItems: 'center',
+                minHeight: "100vh",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "center",
+                alignItems: "center",
                 backgroundImage: `url(${backgroundImage})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
+                backgroundSize: "cover",
+                backgroundPosition: "center",
                 padding: 4,
-                color: 'white',
-                overflow: 'auto',
+                color: "white",
+                overflow: "auto",
             }}
         >
             <Typography variant="h3" color="white" mb={2}>
-                See True Technologies
+               See True
             </Typography>
 
             <input
@@ -86,7 +132,7 @@ function CsvUpload() {
                 type="file"
                 onChange={handleFileChange}
                 accept=".csv"
-                style={{ display: 'none' }}
+                style={{ display: "none" }}
             />
 
             <Button
@@ -94,7 +140,7 @@ function CsvUpload() {
                 color="primary"
                 onClick={handleButtonClick}
                 sx={{ mb: 2 }}
-                disabled={loading}
+                disabled={loading || polling}
             >
                 Choose CSV File
             </Button>
@@ -113,57 +159,27 @@ function CsvUpload() {
                     color="secondary"
                     onClick={handleUpload}
                     sx={{ mt: 2 }}
+                    disabled={loading || polling}
                 >
                     Upload
                 </Button>
             )}
 
-            {predictions.length > 0 && (
-                <Box
-                    sx={{
-                        mt: 4,
-                        maxWidth: '80%',
-                        backgroundColor: 'white',
-                        color: 'black',
-                        borderRadius: '8px',
-                        overflow: 'hidden',
-                    }}
-                >
-                    <TableContainer component={Paper}>
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Prediction Index</TableCell>
-                                    <TableCell>Predictions</TableCell>
-                                    <TableCell>Label Classes</TableCell>
-                                    <TableCell>Prev Euclidean Distance</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {paginatedData.map((prediction, index) => (
-                                    <TableRow key={index}>
-                                        <TableCell>{page * rowsPerPage + index + 1}</TableCell>
-                                        <TableCell>{prediction.predictions.join(", ")}</TableCell>
-                                        <TableCell>{prediction.label_classes.join(", ")}</TableCell>
-                                        <TableCell>{prediction.prev_euclidean_distance ?? "N/A"}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                    <TablePagination
-                        rowsPerPageOptions={[10, 25, 50]}
-                        component="div"
-                        count={predictions.length}
-                        rowsPerPage={rowsPerPage}
-                        page={page}
-                        onPageChange={handleChangePage}
-                        onRowsPerPageChange={handleChangeRowsPerPage}
-                    />
-                </Box>
+            {polling && (
+                <Typography variant="h4" color="white" mt={4}>
+                    Current Activity: {currentActivity}
+                </Typography>
             )}
+
+            {finalActivity && (
+                <Typography variant="h4" color="lime" mt={4}>
+                    Final Activity: {finalActivity}
+                </Typography>
+            )}
+
+            <ToastContainer />
         </Box>
     );
 }
 
-export default CsvUpload;
+export default CsvLiveActivity;
