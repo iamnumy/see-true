@@ -12,11 +12,12 @@ function CsvLiveActivity() {
     const [currentActivity, setCurrentActivity] = useState("N/A");
     const [finalActivity, setFinalActivity] = useState(null);
     const [resultsKey, setResultsKey] = useState(null);
+    const [batchResults, setBatchResults] = useState([]);
 
     const labelMap = {
-        "1": "Walking",
-        "2": "Reading",
-        "3": "Playing",
+        walking: "Walking",
+        reading: "Reading",
+        playing: "Playing",
     };
 
     const handleFileChange = (event) => {
@@ -32,19 +33,18 @@ function CsvLiveActivity() {
         setLoading(true);
         setResultsKey(null);
         setFinalActivity(null);
+        setBatchResults([]);
 
         const formData = new FormData();
         formData.append("file", csvFile);
 
         try {
             const response = await axios.post("http://localhost:8000/classify_in_batches", formData, {
-                headers: {
-                    "Content-Type": "multipart/form-data",
-                },
+                headers: { "Content-Type": "multipart/form-data" },
             });
 
             setResultsKey(response.data.key);
-            toast.success("File uploaded and processing started!");
+            toast.success("File uploaded successfully. Processing started!");
         } catch (error) {
             console.error("Error uploading file:", error);
             toast.error("Failed to upload and process the file.");
@@ -57,45 +57,28 @@ function CsvLiveActivity() {
         if (resultsKey) {
             setPolling(true);
 
-            const cumulativeActivitySums = { "1": 0, "2": 0, "3": 0 };
-
             const interval = setInterval(async () => {
                 try {
                     const response = await axios.get(`http://localhost:8000/results/${resultsKey}`);
-                    const batches = response.data.batches;
+                    const resultData = response.data;
 
-                    if (batches.length > 0) {
-                        const latestBatch = batches[batches.length - 1];
-
-                        const batchActivitySums = { "1": 0, "2": 0, "3": 0 };
-
-                        latestBatch.forEach((prediction) => {
-                            prediction.predictions.forEach((probability, index) => {
-                                const label = prediction.label_classes[index];
-                                batchActivitySums[label] += probability;
-                                cumulativeActivitySums[label] += probability;
-                            });
-                        });
-
-                        const batchDominantActivity = Object.keys(batchActivitySums).reduce((a, b) =>
-                            batchActivitySums[a] > batchActivitySums[b] ? a : b
-                        );
-                        setCurrentActivity(labelMap[batchDominantActivity]);
+                    if (resultData.batches?.length > 0) {
+                        const latestBatch = resultData.batches[resultData.batches.length - 1];
+                        setCurrentActivity(labelMap[latestBatch.highest_class]);
+                        setBatchResults((prev) => [...prev, latestBatch]);
                     }
 
-                    if (response.data.status === "complete") {
+                    if (resultData.status === "complete") {
                         clearInterval(interval);
                         setPolling(false);
-
-                        const finalDominantActivity = Object.keys(cumulativeActivitySums).reduce((a, b) =>
-                            cumulativeActivitySums[a] > cumulativeActivitySums[b] ? a : b
-                        );
-                        setFinalActivity(labelMap[finalDominantActivity]);
-                        toast.success(`Processing complete! Final Activity: ${labelMap[finalDominantActivity]}`);
+                        setFinalActivity(resultData.final_result.final_activity); // Correctly set final activity
+                        toast.success(`Processing complete! Final Activity: ${resultData.final_result.final_activity}`);
                     }
                 } catch (error) {
                     console.error("Error fetching results:", error);
-                    toast.error("Error fetching results.");
+                    toast.error("Error fetching results. Stopping polling.");
+                    clearInterval(interval);
+                    setPolling(false);
                 }
             }, 10000);
 
@@ -124,7 +107,7 @@ function CsvLiveActivity() {
             }}
         >
             <Typography variant="h3" color="white" mb={2}>
-               See True
+                See True
             </Typography>
 
             <input
@@ -166,9 +149,15 @@ function CsvLiveActivity() {
             )}
 
             {polling && (
-                <Typography variant="h4" color="white" mt={4}>
-                    Current Activity: {currentActivity}
-                </Typography>
+                <>
+                    <Box sx={{ mt: 2, textAlign: "left" }}>
+                        {batchResults.map((batch, index) => (
+                            <Typography key={index} variant="body2" color="lightgray">
+                                Batch {index + 1}: {labelMap[batch.highest_class]} ({JSON.stringify(batch.means)})
+                            </Typography>
+                        ))}
+                    </Box>
+                </>
             )}
 
             {finalActivity && (
